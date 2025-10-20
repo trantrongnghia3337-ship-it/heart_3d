@@ -2,14 +2,14 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <title>Heart + Flying Text (Mobile)</title>
+  <title>Heart + Flying Text (Auto Scale)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <style>
     html, body {
-      width: 100%;
-      height: 100%;
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
       background: #000;
       overflow: hidden;
       touch-action: none;
@@ -19,8 +19,9 @@
       position: fixed;
       top: 0;
       left: 0;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
+      max-height: 100dvh;
     }
   </style>
 </head>
@@ -29,11 +30,10 @@
 
 <script>
 window.requestAnimationFrame =
-  window.__requestAnimationFrame ||
   window.requestAnimationFrame ||
   window.webkitRequestAnimationFrame ||
   window.mozRequestAnimationFrame ||
-  function (cb) { setTimeout(cb, 1000 / 60); };
+  (cb => setTimeout(cb, 1000 / 60));
 
 const isDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i
   .test((navigator.userAgent || navigator.vendor || window.opera).toLowerCase());
@@ -46,38 +46,50 @@ function init() {
   const ctx = canvas.getContext("2d");
 
   function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   resize();
   window.addEventListener("resize", resize);
 
-  const width = () => canvas.width;
-  const height = () => canvas.height;
+  const width = () => canvas.width / (window.devicePixelRatio || 1);
+  const height = () => canvas.height / (window.devicePixelRatio || 1);
 
+  // === Công thức hình tim ===
   function heartPosition(rad) {
     return [
       Math.pow(Math.sin(rad), 3),
       -(15 * Math.cos(rad) - 5 * Math.cos(2 * rad) - 2 * Math.cos(3 * rad) - Math.cos(4 * rad))
     ];
   }
+
   function scaleAndTranslate(pos, sx, sy, dx, dy) {
     return [dx + pos[0] * sx, dy + pos[1] * sy];
   }
 
   const traceCount = isDevice ? 20 : 50;
-  const pointsOrigin = [];
   const dr = isDevice ? 0.3 : 0.1;
+  const pointsOrigin = [];
 
+  // ✅ Scale động theo kích thước màn hình
+  function computeHeartScale() {
+    const s = Math.min(width(), height());
+    return { sx1: s * 0.25, sy1: s * 0.02, sx2: s * 0.18, sy2: s * 0.015, sx3: s * 0.12, sy3: s * 0.009 };
+  }
+
+  let scale = computeHeartScale();
   for (let i = 0; i < Math.PI * 2; i += dr)
-    pointsOrigin.push(scaleAndTranslate(heartPosition(i), 210, 13, 0, 0));
+    pointsOrigin.push(scaleAndTranslate(heartPosition(i), scale.sx1, scale.sy1, 0, 0));
   for (let i = 0; i < Math.PI * 2; i += dr)
-    pointsOrigin.push(scaleAndTranslate(heartPosition(i), 150, 9, 0, 0));
+    pointsOrigin.push(scaleAndTranslate(heartPosition(i), scale.sx2, scale.sy2, 0, 0));
   for (let i = 0; i < Math.PI * 2; i += dr)
-    pointsOrigin.push(scaleAndTranslate(heartPosition(i), 90, 5, 0, 0));
+    pointsOrigin.push(scaleAndTranslate(heartPosition(i), scale.sx3, scale.sy3, 0, 0));
 
   const heartPointsCount = pointsOrigin.length;
   const targetPoints = [];
+
   function pulse(kx, ky) {
     for (let i = 0; i < pointsOrigin.length; i++) {
       targetPoints[i] = [
@@ -92,14 +104,13 @@ function init() {
   for (let i = 0; i < heartPointsCount; i++) {
     const x = rand() * width(), y = rand() * height();
     e[i] = {
-      vx: 0, vy: 0, R: 2, speed: rand() + 5,
+      vx: 0, vy: 0, speed: rand() + 5,
       q: ~~(rand() * heartPointsCount),
       D: 2 * (i % 2) - 1,
       force: 0.2 * rand() + 0.7,
       f: `hsla(185,${~~(40 * rand() + 60)}%,${~~(60 * rand() + 20)}%,.35)`,
-      trace: []
+      trace: Array.from({ length: traceCount }, () => ({ x, y }))
     };
-    for (let k = 0; k < traceCount; k++) e[i].trace[k] = { x, y };
   }
 
   const config = { traceK: 0.4, timeDelta: 0.01 };
@@ -113,10 +124,9 @@ function init() {
       y: height() / 2 + (rand() - 0.5) * 160,
       vx: (rand() - 0.5) * 1.2,
       vy: (rand() - 0.5) * 0.8,
-      size: isDevice ? 16 : 22,
+      size: isDevice ? 18 : 24,
       hue: 185 + (rand() * 20 - 10),
-      jitter: rand() * Math.PI * 2,
-      wobble: 8 + rand() * 10
+      jitter: rand() * Math.PI * 2
     });
   }
 
@@ -126,6 +136,7 @@ function init() {
     for (const s of texts) {
       s.x += s.vx + Math.sin(t * 0.02 + s.jitter) * 0.2;
       s.y += s.vy + Math.cos(t * 0.018 + s.jitter) * 0.2;
+
       const padX = 60, padY = 40;
       if (s.x < padX || s.x > width() - padX) s.vx *= -1;
       if (s.y < padY || s.y > height() - padY) s.vy *= -1;
@@ -135,8 +146,9 @@ function init() {
       ctx.textBaseline = "middle";
       const color = `hsl(${s.hue},100%,70%)`;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 6;
-      ctx.fillStyle = `hsla(${s.hue},100%,75%,0.8)`;
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = `hsla(${s.hue},100%,75%,0.85)`;
+
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.rotate(Math.sin(t * 0.01 + s.jitter) * 0.08);
@@ -183,6 +195,7 @@ function init() {
         ctx.fillRect(u.trace[k].x, u.trace[k].y, 1.5, 1.5);
       }
     }
+
     drawFlyingTexts(time);
     requestAnimationFrame(loop);
   }
